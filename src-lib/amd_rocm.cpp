@@ -5,18 +5,62 @@
 #include <rocm-core/rocm_version.h>
 #include <rocm_smi/rocm_smi.h>
 
+#if __has_include(<sys/utsname.h>)
+#include <sys/utsname.h>
+#endif
+
 
 namespace
 {
 	static auto & cfg_and_state = Darknet::CfgAndState::get();
 }
 
+int is_wsl() {
+
+#if __has_include(<sys/utsname.h>)
+  struct utsname buf;
+  if (uname(&buf) != 0)
+    return -1;
+
+  std::string_view sysname(buf.sysname);
+  std::string_view release(buf.release);
+
+#ifdef DEBUG
+  std::cout << "sysname: " << sysname << "   release: " << release << "   machine: " << buf.machine << "\n";
+#endif
+
+  if (sysname != "Linux")
+    return 0;
+
+#ifdef __cpp_lib_starts_ends_with
+  if (release.ends_with("microsoft-standard-WSL2"))
+    return 2;
+  if (release.ends_with("-Microsoft"))
+    return 1;
+#else
+  if (release.find("microsoft-standard-WSL2") != std::string::npos)
+    return 2;
+  if (release.find("-Microsoft") != std::string::npos)
+    return 1;
+#endif
+
+  return 0;
+#endif
+
+  return -1;
+}
 
 void Darknet::show_rocm_info()
 {
+	
 	TAT(TATPARMS);
-
+	
 	*cfg_and_state.output << "AMD ROCm v" << ROCM_BUILD_INFO << std::endl;
+	if (is_wsl() > 0) 
+	{
+		*cfg_and_state.output << "WSL detected! Skipping the rest of rocm info as it relies on rocm-smi, which does not work in WSL." << std::endl;
+		return;
+	}
 
 	const auto status1 = rsmi_init(0);
 
